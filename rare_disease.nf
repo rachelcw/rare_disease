@@ -1,6 +1,7 @@
 params.input = 'data/*'
 
 process BAM2JUNC {
+    
     // convert bam to junc file and create a txt file of list of junction sample
     input:
     file(input) from input_ch
