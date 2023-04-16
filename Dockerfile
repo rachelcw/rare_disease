@@ -34,7 +34,7 @@ RUN git clone --branch v1.0.2 https://github.com/BennyStrobes/SPOT.git /opt/spot
 # Set the working directory
 WORKDIR /opt/spot
 
-# Set environment variables
+# Set environment  variables
 ENV PYTHONPATH=/opt/spot/src
 # ENV SPOT_CONFIG=/opt/spot/config.yaml 
 
