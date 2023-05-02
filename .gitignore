@@ -1,1 +1,6 @@
+output_file.bed
+data
+.nextflow
+.nextflow.log*
+work
 
