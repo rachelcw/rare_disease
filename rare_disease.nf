@@ -25,20 +25,22 @@ process BAM2JUNC {
 
 }
 
-// process CLUSTERING {
-//     //using bash script insted docker?
-//     container 'leafcutter'
-//     input:
-//     file 'junc_list.txt'
+process CLUSTERING {
+    //using bash script insted docker?
+    container 'leafcutter'
+    
+    input:
+    path test_juncfiles
 
-//     output:
-//     file 'results.txt'
+    output:
+    path 'clustering.txt'
 
-//     script:
-//     """
-//     # Command to analyze data
-//     """
-// }
+    script:
+    """
+    python /leafcutter/clustering/leafcutter_cluster_regtools.py -j $test_juncfiles.txt -o leafcutter_out -r /home/ls/rachelcw/projects/rare_disease/results/
+    echo Done
+    """
+}
 
 // process SPOT {
 //     container 'spot'
