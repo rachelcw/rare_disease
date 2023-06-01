@@ -1,4 +1,4 @@
-name: regsam
+name: bam2junc
 channels:
   - defaults
   - r
