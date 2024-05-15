@@ -38,4 +38,4 @@ WORKDIR /opt/spot
 
 # Set environment variables
 ENV PYTHONPATH=/opt/spot/src
-# ENV SPOT_CONFIG=/opt/spot/config.yaml 
+
