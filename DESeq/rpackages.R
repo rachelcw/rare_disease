@@ -1,0 +1,1 @@
+BiocManager::install(c("DESeq2", "EnhancedVolcano", "tximport", "GenomicFeatures", "org.Hs.eg.db", "clusterProfiler"))
