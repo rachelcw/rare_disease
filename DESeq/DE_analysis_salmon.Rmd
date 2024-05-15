@@ -1,0 +1,321 @@
+---
+title: ""
+output: html_document
+params:
+  sample: ""
+  list_genes: ""
+  cutoff_sum_reads: ""
+  FC: ""
+  num_to_plot: ""
+  metadata: ""
+---
+
+<style type="text/css">
+  body{
+  font-size: 15pt;
+}
+</style>
+
+```{r echo=FALSE, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_chunk$set(warning  = FALSE)
+
+```
+
+
+```{r echo=FALSE, include=FALSE }
+
+# load libraries
+
+library(dplyr)
+library(tidyr)
+library(readr)
+library(purrr)
+library(tibble)
+library(stringr)
+#library("tidyverse")
+library(data.table)
+library(DESeq2)
+library("EnhancedVolcano")
+library(foreach)
+library(tximport)
+# library(TxDb.Hsapiens.UCSC.hg38.knownGene)
+library(GenomicFeatures)
+library("org.Hs.eg.db")
+library(AnnotationDbi)
+library(clusterProfiler)
+
+
+orgdb = "org.Hs.eg.db"
+
+# load functions
+# source("/nadata/users/racheli/nextflow/scripts/preprocess_data.R")
+source("/data01/home/ls/rachelcw/projects/rare_disease/DESeq/deseq_analysis_functions.R")
+
+```
+
+
+```{r}
+sample = params$sample
+list_genes = params$list_genes
+cutoff_sum_reads = params$cutoff_sum_reads
+FC = params$FC
+num_to_plot = params$num_to_plot
+metadata = params$metadata
+```
+
+
+```{r}
+# params for DESeq analysis filtering
+# sample = "somech"
+# list_genes = ""
+
+# indir = paste0("/PostExome/RNAseq/Analysis/",sample,"_merged")
+# out_dir = paste0(indir,"/deseq_res")
+# outdir = paste0("/data01/home/ls/rachelcw/projects/rare_disease/data/",sample, "/deseq_res")
+# dir.create(outdir)
+# out_file = paste0(out_dir,"/",sample,"_DE_report.html")
+# cutoff_sum_reads = 50
+# FC = 2
+# num_to_plot = 10
+# metadata=paste0("/data01/home/ls/rachelcw/projects/rare_disease/data/",sample,"/list_sample_labeled.txt")
+# metadata=paste0("/PostExome/RNAseq/Analysis/",sample,"/list_samples_labeled.txt")
+```
+
+```{r}
+# run female vs male - drop gene with associated to the sex
+# sample = "male_vs_female"
+# list_genes = ""
+# # 
+# indir = "/PostExome/RNAseq/Analysis"
+# out_dir = paste0(indir,"/deseq_m_vs_f")
+# dir.create(out_dir)
+# out_file = paste0(out_dir,"/",sample,"_DE_report.html")
+# cutoff_sum_reads = 50
+# FC = 2
+# num_to_plot = 10
+# metadata="/PostExome/RNAseq/Analysis/male_vs_female_healthy.tsv"
+```
+
+
+
+tximport and salmon
+```{r}
+# txdb <- TxDb.Hsapiens.UCSC.hg38.knownGene
+# k <- keys(txdb, keytype = "TXNAME")
+# tx2gene <- select(txdb, k, "GENEID", "TXNAME")
+# write.csv(tx2gene, "/home/ls/rachelcw/projects/rare_disease/data/tx2gene_hg38.csv", row.names=FALSE)
+tx2gene <- read.csv("/home/ls/rachelcw/projects/rare_disease/DESeq/tx2gene_hg38.csv")
+
+```
+
+```{r}
+
+# txdb <- makeTxDbFromGFF("/data01/private/resources/GRCh38_hg38/gencode.v34.GRCh38.annotation.gtf")
+# k <- keys(txdb, keytype = "TXNAME")
+# tx2gene <- select(txdb, keys = k, columns = c("TXNAME", "GENEID"), keytype = "TXNAME")
+
+```
+
+read salmon files (quant.sf)
+```{r}
+salmon_directory_family <-paste0("/home/ls/rachelcw/projects/rare_disease/data/",sample,"/salmon_quant")
+files <- list.files(salmon_directory_family, pattern = "\\.sf$", full.names = TRUE)
+samples <- list.files(salmon_directory_family, pattern = "\\.sf$", full.names = FALSE)
+samples <- sub("_quant\\.sf$", "", samples)
+```
+
+
+```{r}
+# write.csv(tx2gene, "/home/ls/rachelcw/projects/rare_disease/data/tx2gene_hg38_geneID.csv", row.names=FALSE)
+```
+
+```{r}
+names(files) <- samples
+txi <- tximport(files, type = "salmon", tx2gene = tx2gene)
+
+```
+
+## Report for project: **`r sample`**
+
+```{r  echo=FALSE, include=FALSE}
+# Get metadata:
+sample_info <- readr::read_delim(file = metadata, delim = "\t", col_names = c("sample","condition"), show_col_types = FALSE)
+
+sample_info$condition <- as.factor(sample_info$condition)
+
+ord <- order(match(sample_info$sample, colnames(txi$counts)))
+sample_info <- sample_info[ord,]
+
+colData = data.frame(row.names = colnames(txi$counts),
+                     condition = sample_info$condition)
+```
+
+```{r}
+dds <- DESeqDataSetFromTximport(txi,
+                                   colData = colData,
+                                   design = ~ condition)
+
+```
+
+Samples list:
+
+```{r}
+colData
+```
+
+```{r}
+
+dds <- dds[ rowSums(counts(dds)) > cutoff_sum_reads , ]
+rownames(dds) <- getGeneName(rownames(dds))
+```
+
+## PCA
+
+```{r}
+# plot PCA
+if(nrow(colData) < 30){
+	transformation <- rlog(dds, blind=FALSE)
+}else{
+	transformation <- vst(dds, blind=FALSE)
+}
+
+pcaData <- plotPCA(transformation, intgroup = c("condition"), returnData = TRUE)
+p <- ggplot(pcaData, aes(x = PC1, y = PC2, color = condition)) +
+  geom_point(size = 4) +
+  geom_text(aes(label = name), size = 3, vjust = -1.3) +
+  theme_classic(base_size = 16) +
+  theme(axis.text = element_text(colour = "black", size = 18)) +
+  ylim(min(pcaData$PC2), max(pcaData$PC2) + 1)
+
+# Print the new plot
+print(p)
+
+```
+
+
+## DE analysis
+
+
+```{r}
+# DESeq analysis and write to file sig genes analysis
+
+
+dds = DESeq(dds)
+
+# resultsNames(dds)
+```
+
+
+```{r}
+a = sig_genes(dds,FC = FC,pval=0.05)
+sig = a[[1]]
+res = a[[2]]
+```
+
+
+```{r}
+# filter gene by the associated gene of the patients
+list_genes <- "ABL | ABL1 | AGMX1 | ARID3A | BLNK | BTK | CARD11 | CD19 | CD72 | CD79A | CD79B | CDCA7 | CIDX | CIITA | DAPP1 | DFN1 | DRIL1 | FNIP1 | GP6 | HELLS | HKE4| IGA | IGB | IGHM | IGLL | IGLL1 | IKBKB | IKZF1 | IL2RG | IMD1 | IMD2 | IMD4 | LRRC8 | LRRC8A | MAN2B1 | MANB | MHC2TA | MLLT1 | MPP7 | PIK3CD | PIK3R1 | PKCB | PLCG2 | PRKCB | PRKCB1 | PRKCB2 | PRKCM | PRKD1 | PTK6 | RFX5 | RFXANK | RFXAP | SCIDX1 | SH3KBP1 | SIGIRR | SLC39A7 | SPI1 | TCF3 | THC | TIMM8A | TLR6 | TOP2B | TTC7 | TTC7A | WAS | ZNFN1A1"
+
+list_genes <- strsplit(list_genes, " \\| ")
+list_genes <- list_genes[[1]]
+```
+
+
+```{r}
+# save the sig genes with associated to the patients
+if (length(list_genes)>0 ){
+  filtered_data <- sig[rownames(sig) %in% list_genes, ]
+  write.csv(filtered_data, paste0(outdir,"/sig_genes_associated.csv"))
+}
+
+```
+
+
+```{r}
+write.csv(res, paste0(outdir,"/All_res_family.csv"))
+write.csv(sig, paste0(outdir,"/sig_genes_family.csv"))
+
+```
+parameters: 
+
+FC >= `r FC`
+
+pval (fdr corrected) = 0.05
+
+**We get `r nrow(sig)` genes significantly changing**
+
+
+Volcano plot for padj < 0.05 &  log2(FC) > `r log2(FC)`
+
+
+```{r}
+
+p=EnhancedVolcano(res,
+                  lab = rownames(res),
+                  x = 'log2FoldChange',
+                  y = 'padj',
+                  title = "",
+                  pCutoff = 0.05,
+                  FCcutoff = log2(FC),
+                  pointSize = 0.5,
+                  labSize = 2.5,
+                  col = c("indianred1", "gold2", "cornflowerblue", "gray47"))
+p3= p + theme_bw()  
+plot(p3)
+```
+
+
+
+```{r}
+# # GO
+
+
+##Go term enrichment analysis for up/down regulated
+
+res_go = run_go1(row.names(sig), row.names(res), padj = "fdr", ont ="ALL", orgdb= orgdb)
+
+# write.csv(res_go, paste0(out_dir,"/GO_res.csv"))
+```
+
+## Expression for most significant genes
+
+```{r}
+
+sig = sig[order(sig$padj),]
+
+if (nrow(sig) < 10 ){
+  num_to_plot = nrow(sig)
+}
+
+if (nrow(sig) > 0){
+  list_genes2 = row.names(sig)[1:num_to_plot]
+  intgroup=c("condition")
+  for (gene in list_genes2){
+    plot_gene(dds,gene,intgroup)
+  }
+}
+
+```
+# Expression for the significant focus genes
+
+```{r}
+focus_gene <- row.names(sig[row.names(sig) %in% list_genes,])
+
+intgroup=c("condition")
+if (length(list_genes) >0 ){
+  for (gene in focus_gene){
+    plot_gene(dds,gene,intgroup)
+  }
+}
+```
+
+```{r}
+library(pheatmap)
+
+ntd <- normTransform(dds)
+select <- order(rowMeans(counts(dds, normalized = TRUE)), decreasing = TRUE)[1:20]
+pheatmap(assay(ntd)[select,], cluster_rows =TRUE, show_rownames = TRUE, cluster_cols = TRUE, annotation_col = colData)
+```
+
