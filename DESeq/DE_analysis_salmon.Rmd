@@ -16,7 +16,7 @@ params:
 }
 </style>
 
-```{r echo=FALSE}
+```{r echo=FALSE, , include=FALSE}
 knitr::opts_chunk$set(echo = FALSE)
 knitr::opts_chunk$set(warning  = FALSE)
 
@@ -55,7 +55,7 @@ source("/home/ls/rachelcw/projects/rare_disease/DESeq/deseq_analysis_functions.R
 ```
 
 
-```{r}
+```{r echo=FALSE, include=FALSE}
 sample = params$sample
 list_genes = params$list_genes
 cutoff_sum_reads = params$cutoff_sum_reads
@@ -99,14 +99,15 @@ metadata = params$metadata
 
 
 
-tximport and salmon
+
 ```{r}
+# # tximport and salmon # #
 # txdb <- TxDb.Hsapiens.UCSC.hg38.knownGene
 # k <- keys(txdb, keytype = "TXNAME")
 # tx2gene <- select(txdb, k, "GENEID", "TXNAME")
 # write.csv(tx2gene, "/home/ls/rachelcw/projects/rare_disease/data/tx2gene_hg38.csv", row.names=FALSE)
-tx2gene <- read.csv("/data/tx2gene_hg38.csv")
 # tx2gene <- read.csv("/data01/home/ls/rachelcw/projects/rare_disease/DESeq/tx2gene_hg38.csv")
+tx2gene <- read.csv("/data/tx2gene_hg38.csv")
 
 ```
 
@@ -118,8 +119,9 @@ tx2gene <- read.csv("/data/tx2gene_hg38.csv")
 
 ```
 
-read salmon files (quant.sf)
+
 ```{r}
+# # read salmon files (quant.sf) # #
 salmon_directory_family <-paste0("/home/ls/rachelcw/projects/rare_disease/data/",sample,"/salmon_quant")
 files <- list.files(salmon_directory_family, pattern = "\\.sf$", full.names = TRUE)
 samples <- list.files(salmon_directory_family, pattern = "\\.sf$", full.names = FALSE)
@@ -131,7 +133,7 @@ samples <- sub("_quant\\.sf$", "", samples)
 # write.csv(tx2gene, "/home/ls/rachelcw/projects/rare_disease/data/tx2gene_hg38_geneID.csv", row.names=FALSE)
 ```
 
-```{r}
+```{r echo=FALSE, include=FALSE}
 names(files) <- samples
 txi <- tximport(files, type = "salmon", tx2gene = tx2gene)
 
@@ -152,7 +154,7 @@ colData = data.frame(row.names = colnames(txi$counts),
                      condition = sample_info$condition)
 ```
 
-```{r}
+```{r echo=FALSE, include=FALSE}
 dds <- DESeqDataSetFromTximport(txi,
                                    colData = colData,
                                    design = ~ condition)
@@ -161,17 +163,17 @@ dds <- DESeqDataSetFromTximport(txi,
 
 Samples list:
 
-```{r}
-colData
+```{r }
+knitr::kable(colData, "simple")
 ```
 
-```{r}
+```{r echo=FALSE, include=FALSE}
 dds <- dds[ rowSums(counts(dds)) > cutoff_sum_reads , ]
 rownames(dds) <- mapIds(org.Hs.eg.db, keys=rownames(dds), column = "SYMBOL", keytype = "ENTREZID")
 # rownames(dds) <- getGeneName(rownames(dds))
 ```
 
-```{r}
+```{r echo=FALSE, include=FALSE}
 # remove NA rows
 na_rows <- is.na(rownames(dds))
 
@@ -182,7 +184,7 @@ dds <- dds[!na_rows, ]
 
 ## PCA
 
-```{r}
+```{r warning=FALSE}
 # plot PCA
 if(nrow(colData) < 30){
 	transformation <- rlog(dds, blind=FALSE)
@@ -207,7 +209,7 @@ print(p)
 ## DE analysis
 
 
-```{r}
+```{r echo=FALSE, include=FALSE}
 # DESeq analysis and write to file sig genes analysis
 
 
@@ -260,7 +262,7 @@ pval (fdr corrected) = 0.05
 Volcano plot for padj < 0.05 &  log2(FC) > `r log2(FC)`
 
 
-```{r}
+```{r warning=FALSE}
 
 p=EnhancedVolcano(res,
                   lab = rownames(res),
@@ -276,11 +278,9 @@ p3= p + theme_bw()
 plot(p3)
 ```
 
+Go term enrichment analysis for up/down regulated
 
-
-```{r}
-# # GO
-
+```{r warning=FALSE}
 
 ##Go term enrichment analysis for up/down regulated
 
@@ -288,10 +288,27 @@ res_go = run_go1(row.names(sig), row.names(res), padj = "fdr", ont ="ALL", orgdb
 
 # write.csv(res_go, paste0(out_dir,"/GO_res.csv"))
 ```
+## Expression for the significant focus genes
 
+```{r warning=FALSE, message= FALSE}
+library(gridExtra)
+focus_gene <- row.names(sig[row.names(sig) %in% list_genes,])
+
+intgroup=c("condition")
+# plot_list <- list()
+
+if (length(list_genes) >0 ){
+  for (gene in focus_gene){
+    # plot_gene(dds,gene,intgroup)
+    plot_gene(dds, gene, intgroup)
+  }
+  # grid.arrange(grobs = plot_list, ncol = 2)
+  # print(grid_arranged)  # Display the grid of plots
+}
+```
 ## Expression for most significant genes
 
-```{r}
+```{r warning=FALSE}
 
 sig = sig[order(sig$padj),]
 
@@ -309,24 +326,7 @@ if (nrow(sig) > 0){
 
 ```
 
-## Expression for the significant focus genes
 
-```{r}
-library(gridExtra)
-focus_gene <- row.names(sig[row.names(sig) %in% list_genes,])
-
-intgroup=c("condition")
-# plot_list <- list()
-
-if (length(list_genes) >0 ){
-  for (gene in focus_gene){
-    # plot_gene(dds,gene,intgroup)
-    plot_gene(dds, gene, intgroup)
-  }
-  # grid.arrange(grobs = plot_list, ncol = 2)
-  # print(grid_arranged)  # Display the grid of plots
-}
-```
 
 ```{r}
 # library(pheatmap)
