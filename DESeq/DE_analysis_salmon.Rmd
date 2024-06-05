@@ -184,7 +184,7 @@ dds <- dds[!na_rows, ]
 
 ## PCA
 
-```{r warning=FALSE}
+```{r warning=FALSE, message=FALSE}
 # plot PCA
 if(nrow(colData) < 30){
 	transformation <- rlog(dds, blind=FALSE)
@@ -195,7 +195,7 @@ if(nrow(colData) < 30){
 pcaData <- plotPCA(transformation, intgroup = c("condition"), returnData = TRUE)
 p <- ggplot(pcaData, aes(x = PC1, y = PC2, color = condition)) +
   geom_point(size = 4) +
-  geom_text(aes(label = name), size = 3, vjust = -1.3) +
+  geom_text(aes(label = name), size = 3, vjust = -1.3, show.legend = FALSE) +
   theme_classic(base_size = 16) +
   theme(axis.text = element_text(colour = "black", size = 18)) +
   ylim(min(pcaData$PC2), max(pcaData$PC2) + 1) + xlim(min(pcaData$PC1), max(pcaData$PC1) + 1)
@@ -223,6 +223,11 @@ dds = DESeq(dds)
 a = sig_genes(dds,FC = FC,pval=0.05)
 sig = a[[1]]
 res = a[[2]]
+```
+
+```{r}
+# res$d <- ifelse(res$log2FoldChange > 0, "up", "down")
+# table(res$log2FoldChange>0)
 ```
 
 
@@ -262,7 +267,7 @@ pval (fdr corrected) = 0.05
 Volcano plot for padj < 0.05 &  log2(FC) > `r log2(FC)`
 
 
-```{r warning=FALSE}
+```{r warning=FALSE, message=FALSE}
 
 p=EnhancedVolcano(res,
                   lab = rownames(res),
@@ -271,42 +276,86 @@ p=EnhancedVolcano(res,
                   title = "",
                   pCutoff = 0.05,
                   FCcutoff = log2(FC),
-                  pointSize = 0.5,
+                  pointSize = 0.7,
                   labSize = 2.5,
-                  col = c("indianred1", "gold2", "cornflowerblue", "gray47"))
-p3= p + theme_bw()  
+                  subtitle = "",
+                  col = rev(c("indianred1","cornflowerblue","gold2", "gray47")))
+
+p3= p + theme_bw()
 plot(p3)
 ```
 
-Go term enrichment analysis for up/down regulated
+## Go term enrichment analysis for up/down regulated
+
+```{r}
+sig$d <- ifelse(sig$log2FoldChange > 0, "up", "down")
+```
+
+
+```{r}
+comparelist<-list( row.names(sig)[sig$d == "down"], row.names(sig)[sig$d == "up"])
+names(comparelist)<-c("down-regulated","up-regulated") 
+cclust<-compareCluster(geneCluster = comparelist, 
+               fun = enrichGO,
+               OrgDb= org.Hs.eg.db,
+               keyType = "SYMBOL",
+               ont= "ALL",
+               universe=row.names(res))
+```
+
+```{r}
+dotplot(cclust,showCategory=10)  
+```
 
 ```{r warning=FALSE}
 
 ##Go term enrichment analysis for up/down regulated
 
-res_go = run_go1(row.names(sig), row.names(res), padj = "fdr", ont ="ALL", orgdb= orgdb)
+# res_go = run_go1(row.names(sig), row.names(res), padj = "fdr", ont ="ALL", orgdb= orgdb)
 
 # write.csv(res_go, paste0(out_dir,"/GO_res.csv"))
 ```
-## Expression for the significant focus genes
+
+## Expression for Significant Focus Genes
 
 ```{r warning=FALSE, message= FALSE}
-library(gridExtra)
 focus_gene <- row.names(sig[row.names(sig) %in% list_genes,])
 
-intgroup=c("condition")
-# plot_list <- list()
+# intgroup=c("condition")
+# # plot_list <- list()
+# 
+# if (length(list_genes) >0 ){
+#   for (gene in focus_gene){
+#     # plot_gene(dds,gene,intgroup)
+#     plot_gene(dds, gene, intgroup)
+#   }
+#   # grid.arrange(grobs = plot_list, ncol = 2)
+#   # print(grid_arranged)  # Display the grid of plots
+# }
 
-if (length(list_genes) >0 ){
-  for (gene in focus_gene){
-    # plot_gene(dds,gene,intgroup)
-    plot_gene(dds, gene, intgroup)
-  }
-  # grid.arrange(grobs = plot_list, ncol = 2)
-  # print(grid_arranged)  # Display the grid of plots
+# Create a combined data frame for all focus genes
+all_genes_data <- data.frame()
+for (gene in focus_gene) {
+  gene_data <- plotCounts(dds, gene, intgroup = "condition", returnData = TRUE)
+  gene_data$Gene <- gene  # Add a column with the gene name
+  gene_data$Sample <- rownames(gene_data)
+  all_genes_data <- rbind(all_genes_data, gene_data)
 }
+
+# Create the faceted plot
+p <- ggplot(all_genes_data, aes(x = condition, y = count, color = condition)) +
+  geom_point(size = 5, alpha = 0.7) +
+  geom_text(aes(label = Sample), size = 3, vjust = -1.3, show.legend = FALSE) +
+  facet_wrap(~ Gene, scales = "free_y") +  # Facet by gene, allowing different y-scales
+  ylim(0, max(all_genes_data$count) + 300) +
+  theme_bw(base_size = 15) +
+  xlab("")
+
+# Print the plot
+print(p)
 ```
-## Expression for most significant genes
+
+## Expression for Most Significant Genes
 
 ```{r warning=FALSE}
 
