@@ -139,9 +139,10 @@ txi <- tximport(files, type = "salmon", tx2gene = tx2gene)
 
 ```
 
-## Report for project: **`r sample`**
+## Report for Project: S Family
 
 ```{r  echo=FALSE, include=FALSE}
+## Report for project: **`r sample`**
 # Get metadata:
 sample_info <- readr::read_delim(file = metadata, delim = "\t", col_names = c("sample","condition"), show_col_types = FALSE)
 
@@ -164,12 +165,28 @@ dds <- DESeqDataSetFromTximport(txi,
 Samples list:
 
 ```{r }
-knitr::kable(colData, "simple")
+#knitr::kable(colData, "simple")
+
+samples_df <- DataFrame(condition=colData$condition, row.names = c("patient", "healthy1", "healthy2"))
+
+knitr::kable(samples_df, "simple")
+```
+
+```{r}
+# Read gene names from a text file
+genes_to_exclude <- readLines("/home/ls/rachelcw/projects/rare_disease/data/genes_list_m_vs_f.txt")
+# Filter out the genes
+rownames(dds) <- mapIds(org.Hs.eg.db, keys=rownames(dds), column = "SYMBOL", keytype = "ENTREZID")
+
+if (!is.null(genes_to_exclude)) {
+  dds <- dds[!rownames(dds) %in% genes_to_exclude, ]
+}
+
 ```
 
 ```{r echo=FALSE, include=FALSE}
 dds <- dds[ rowSums(counts(dds)) > cutoff_sum_reads , ]
-rownames(dds) <- mapIds(org.Hs.eg.db, keys=rownames(dds), column = "SYMBOL", keytype = "ENTREZID")
+
 # rownames(dds) <- getGeneName(rownames(dds))
 ```
 
@@ -193,6 +210,7 @@ if(nrow(colData) < 30){
 }
 
 pcaData <- plotPCA(transformation, intgroup = c("condition"), returnData = TRUE)
+pcaData$name <- c("patient", "healthy1", "healthy2")
 p <- ggplot(pcaData, aes(x = PC1, y = PC2, color = condition)) +
   geom_point(size = 4) +
   geom_text(aes(label = name), size = 3, vjust = -1.3, show.legend = FALSE) +
@@ -301,6 +319,13 @@ cclust<-compareCluster(geneCluster = comparelist,
                keyType = "SYMBOL",
                ont= "ALL",
                universe=row.names(res))
+go_results <- as.data.frame(cclust)
+
+```
+
+```{r}
+knitr::kable(go_results, "simple")
+# write.csv(go_results, paste0(out_dir,"/GO_res.csv"))
 ```
 
 ```{r}
@@ -334,20 +359,21 @@ focus_gene <- row.names(sig[row.names(sig) %in% list_genes,])
 # }
 
 # Create a combined data frame for all focus genes
-all_genes_data <- data.frame()
+focus_genes_data <- data.frame()
 for (gene in focus_gene) {
   gene_data <- plotCounts(dds, gene, intgroup = "condition", returnData = TRUE)
   gene_data$Gene <- gene  # Add a column with the gene name
-  gene_data$Sample <- rownames(gene_data)
-  all_genes_data <- rbind(all_genes_data, gene_data)
+  # gene_data$Sample <- rownames(gene_data)
+  gene_data$Sample <- c("patient", "healthy1", "healthy2")
+  focus_genes_data <- rbind(focus_genes_data, gene_data)
 }
 
 # Create the faceted plot
-p <- ggplot(all_genes_data, aes(x = condition, y = count, color = condition)) +
+p <- ggplot(focus_genes_data, aes(x = condition, y = count, color = condition)) +
   geom_point(size = 5, alpha = 0.7) +
   geom_text(aes(label = Sample), size = 3, vjust = -1.3, show.legend = FALSE) +
   facet_wrap(~ Gene, scales = "free_y") +  # Facet by gene, allowing different y-scales
-  ylim(0, max(all_genes_data$count) + 300) +
+  ylim(0, max(focus_genes_data$count) + 300) +
   theme_bw(base_size = 15) +
   xlab("")
 
@@ -359,6 +385,24 @@ print(p)
 
 ```{r warning=FALSE}
 
+# sig = sig[order(sig$padj),]
+# 
+# if (nrow(sig) < 10 ){
+#   num_to_plot = nrow(sig)
+# }
+# 
+# if (nrow(sig) > 0){
+#   list_genes2 = row.names(sig)[1:num_to_plot]
+#   intgroup=c("condition")
+#   for (gene in list_genes2){
+#     plot_gene(dds,gene,intgroup)
+#   }
+# }
+
+```
+
+```{r warning=FALSE, message= FALSE}
+all_genes_data <- data.frame()
 sig = sig[order(sig$padj),]
 
 if (nrow(sig) < 10 ){
@@ -367,14 +411,28 @@ if (nrow(sig) < 10 ){
 
 if (nrow(sig) > 0){
   list_genes2 = row.names(sig)[1:num_to_plot]
-  intgroup=c("condition")
-  for (gene in list_genes2){
-    plot_gene(dds,gene,intgroup)
+  for (gene in list_genes2) {
+    gene_data <- plotCounts(dds, gene, intgroup = "condition", returnData = TRUE)
+    gene_data$Gene <- gene  # Add a column with the gene name
+    # gene_data$Sample <- rownames(gene_data)
+    gene_data$Sample <- c("patient", "healthy1", "healthy2")
+    all_genes_data <- rbind(all_genes_data, gene_data)
   }
 }
 
-```
+# Create the faceted plot
+p <- ggplot(all_genes_data, aes(x = condition, y = count, color = condition)) +
+  geom_point(size = 5, alpha = 0.7) +
+  geom_text(aes(label = Sample), size = 3, vjust = -1.3, show.legend = FALSE) +
+  facet_wrap(~ Gene, scales = "free_y", nrow = 2) +
+  theme_bw(base_size = 10) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))+
+  xlab("")
 
+
+# Print the plot
+print(p)
+```
 
 
 ```{r}
