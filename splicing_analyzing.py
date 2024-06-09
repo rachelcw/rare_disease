@@ -36,11 +36,11 @@ def get_leafcutter_results(lc_path, list_of_genes):
     effect_size_df.drop(['intron'], axis=1, inplace=True)
     lc_merged_df=effect_size_df.merge(cluster_df, on=["chr","cluster","strand"], how="outer")
     lc_results=lc_merged_df[['genes','junction','deltapsi','p','p.adjust']]
-    lc_results_sig=lc_results[lc_merged_df['p.adjust'] < 0.05]  
-    lc_results_focus_gene = lc_results[lc_merged_df['genes'].isin(list_of_genes)]
-    lc_results_sig_focus_gene = lc_results_sig[lc_results_sig['genes'].isin(list_of_genes)]
+    # lc_results_sig=lc_results[lc_merged_df['p.adjust'] < 0.05]  
+    # lc_results_focus_gene = lc_results[lc_merged_df['genes'].isin(list_of_genes)]
+    # lc_results_sig_focus_gene = lc_results_sig[lc_results_sig['genes'].isin(list_of_genes)]
 
-    return lc_results, lc_results_sig, lc_results_focus_gene, lc_results_sig_focus_gene
+    return lc_results
 
 def get_rmats_files(rmats_path):
     mats_files = glob.glob(rmats_path + "/*.MATS.JC.txt")
@@ -71,10 +71,10 @@ def get_rmats_results(rmats_path,list_of_genes):
     a3ss_df, a5ss_df, mxe_df, ri_df, se_df = get_rmats_files(rmats_path)
     rmats_results=pd.concat([a3ss_df, a5ss_df, se_df, ri_df, mxe_df])
     rmats_results = rmats_results[['GeneID','geneSymbol','junction', 'event','PValue','FDR', 'IncLevelDifference']]
-    rmats_results_sig = rmats_results[rmats_results['FDR'] < 0.05] 
-    rmats_results_focus_gene = rmats_results[rmats_results['geneSymbol'].isin(list_of_genes)]
-    rmats_results_sig_focus_gene = rmats_results_sig[rmats_results_sig['geneSymbol'].isin(list_of_genes)]
-    return rmats_results, rmats_results_sig, rmats_results_focus_gene, rmats_results_sig_focus_gene
+    # rmats_results_sig = rmats_results[rmats_results['FDR'] < 0.05] 
+    # rmats_results_focus_gene = rmats_results[rmats_results['geneSymbol'].isin(list_of_genes)]
+    # rmats_results_sig_focus_gene = rmats_results_sig[rmats_results_sig['geneSymbol'].isin(list_of_genes)]
+    return rmats_results
 
 
 def get_majiq_results(majiq_path, list_of_genes):
@@ -88,21 +88,27 @@ def get_majiq_results(majiq_path, list_of_genes):
     majiq_results=majiq_results[['gene_name', 'Gene ID', 'LSV ID','E(dPSI) per LSV junction',
        'P(|dPSI|>=0.20) per LSV junction', 'P(|dPSI|<=0.05) per LSV junction','Junctions coords','IR coords', 'UCSC LSV Link', 'event']]
     # TODO: filter by gene list
-    majiq_results_focus_gene = majiq_results[majiq_results['gene_name'].isin(list_of_genes)]
-    return majiq_results, majiq_results_focus_gene
+    # majiq_results_focus_gene = majiq_results[majiq_results['gene_name'].isin(list_of_genes)]
+    return majiq_results
 
-def merge_results(rmats_path, lc_path, majiq_path, list_of_genes):
-    rmats_results, rmats_results_sig, rmats_results_focus_gene, rmats_results_sig_focus_gene= get_rmats_results(rmats_path, list_of_genes)
-    lc_results, lc_results_sig, lc_results_focus_gene, lc_results_sig_focus_gene = get_leafcutter_results(lc_path, list_of_genes)
-    majiq_results, majiq_results_focus_gene = get_majiq_results(majiq_path, list_of_genes)
-    all_results = lc_results.merge(rmats_results, on=["junction"], how="outer")
-    # all_results=all_results.merge(majiq_results, left_on=["geneSymbol"], right_on=["gene_name"], how="outer")
-    all_results= all_results.merge(majiq_results, on=["gene_name"], how="outer")
-    all_results_sig= lc_results_sig.merge(rmats_results_sig, on=["junction"], how="outer")
-    all_results_focus_gene = lc_results_focus_gene.merge(rmats_results_focus_gene, on=["junction"], how="outer")
-    # all_results_focus_gene = all_results_focus_gene.merge(majiq_results_focus_gene, left_on=["geneSymbol"], right_on=["gene_name"], how="outer")
-    all_results_sig_focus_gene = lc_results_sig_focus_gene.merge(rmats_results_sig_focus_gene, on=["junction"], how="outer")
-    return all_results, all_results_sig, all_results_focus_gene, all_results_sig_focus_gene
+def merge_rmat_leafcutter(rmats_path, lc_path):
+    rmats_results= get_rmats_results(rmats_path)
+    lc_results= get_leafcutter_results(lc_path)
+    # majiq_results =  get_majiq_results(majiq_path, list_of_genes)
+    all_results = lc_results.merge(rmats_results, on=["junction"], how="outer", suffixes=('_lc', '_rmats'))
+    return all_results
+
+def merge_majiq(all_results, majiq_results):
+    all_results["majiq"]=0
+    all_results["junction"]=all_results["junction"].apply(lambda x: f"{x.split(":")[1]}-{x.split(":")[2]}")
+    for index, row in all_results.iterrows():
+        for junction in majiq_results.loc[row["gene"]==majiq_results["gene_name"]]["Junctions coords"]:
+            junction_list=junction.split(";")
+            if row["junction"] in junction_list:
+                all_results.loc[index, "majiq"]=1
+    majiq_junction=all_results[all_results["majiq"]==1]
+    # filter majiq results by junctions
+    majiq_results_to_merge=majiq_results(majiq_results["Junctions coords"].apply(lambda x: x.split(";")).explode().isin(majiq_junction["junction"]))
 
 #TODO ####
 def get_common_junctions(lc_results, rmats_results, majiq_results):
